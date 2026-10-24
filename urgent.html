@@ -1,0 +1,665 @@
+
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Ošetřovatelský zápis | Urgent</title>
+<style>
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #f0f3f8;
+  color: #192638;
+}
+header {
+  background: #142d49;
+  color: white;
+  padding: 24px 18px;
+}
+header h1 { margin: 0 0 7px; font-size: 23px; }
+header p { margin: 0; opacity: .8; font-size: 13px; }
+main { max-width: 850px; margin: auto; padding: 14px; }
+section {
+  background: white;
+  border-radius: 13px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border: 1px solid #dce3ec;
+}
+summary {
+  padding: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #e5edf7;
+  color: #183b63;
+}
+.content { padding: 16px; }
+.field { margin-bottom: 20px; }
+.field label.title {
+  display: block;
+  font-weight: 650;
+  margin-bottom: 9px;
+  font-size: 14px;
+}
+.options {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 8px;
+}
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  cursor: pointer;
+  min-height: 43px;
+}
+.choice:has(input:checked) {
+  background: #e5f0ff;
+  border-color: #3779c5;
+}
+input[type=checkbox], input[type=radio] {
+  accent-color: #2367ad;
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+textarea, input[type=text], select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #c9d5e3;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 15px;
+  background: white;
+}
+textarea { min-height: 65px; resize: vertical; }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+button {
+  border: 0;
+  border-radius: 9px;
+  padding: 13px 16px;
+  background: #235d99;
+  color: white;
+  font-weight: 650;
+  cursor: pointer;
+  font-size: 14px;
+}
+button.secondary { background: #dce7f3; color: #183b63; }
+button.danger { background: #8c3744; }
+button:active { opacity: .75; }
+#output {
+  background: #f7f9fc;
+  white-space: pre-wrap;
+  padding: 16px;
+  line-height: 1.65;
+  border-radius: 8px;
+  border: 1px solid #d7e0ea;
+  min-height: 120px;
+  font-size: 14px;
+}
+#progress { font-size: 13px; margin-bottom: 12px; color: #506477; }
+.notice { color: #66798d; font-size: 12px; line-height: 1.5; }
+@media(max-width:430px) {
+  .options { grid-template-columns: 1fr 1fr; }
+  .choice { font-size: 12px; padding: 8px; }
+}
+@media print {
+  header, .toolbar, #formArea, .notice, #progress { display:none!important; }
+  body { background:white; }
+  section { border:0; }
+  #output { border:0; font-size:12pt; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Ošetřovatelský zápis</h1>
+  <p>Urgentní příjem | Resuscitační a intenzivní péče</p>
+</header>
+
+<main>
+  <section>
+    <div class="content">
+      <div class="field">
+        <label class="title">Směna</label>
+        <div class="options">
+          <label class="choice">
+            <input type="radio" name="shift" value="Denní"> Denní
+          </label>
+          <label class="choice">
+            <input type="radio" name="shift" value="Noční" checked> Noční
+          </label>
+        </div>
+      </div>
+      <div id="progress"></div>
+      <div class="toolbar">
+        <button class="secondary" onclick="toggleAll(true)">Rozbalit vše</button>
+        <button class="secondary" onclick="toggleAll(false)">Sbalit vše</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="formArea"></div>
+
+  <section>
+    <div class="content">
+      <h2>Automatický zápis</h2>
+      <p class="notice">
+        Text se generuje z vyplněných položek.
+        Nevyplněné údaje se vynechávají.
+      </p>
+      <div id="output"></div>
+      <div class="toolbar" style="margin-top:14px">
+        <button onclick="copyReport()">Kopírovat zápis</button>
+        <button onclick="saveText()">Uložit TXT</button>
+        <button onclick="window.print()">Tisk / PDF</button>
+        <button class="danger" onclick="clearForm()">Vymazat</button>
+      </div>
+      <p id="status" class="notice"></p>
+    </div>
+  </section>
+  <p class="notice">
+    Údaje se neodesílají na server. Před použitím v dokumentaci
+    zkontrolujte správnost textu, jednotek, časů a klinických údajů.
+  </p>
+</main>
+
+<script>
+"use strict";
+
+const sections = [
+{
+ title:"01 | Příjem pacienta",
+ fields:[
+ ["Způsob přijetí","one",
+  "ZZS HMP|ZZS SČK|LZS|Jiné oddělení|Jiná nemocnice|Samostatný příchod|Jiná ZZS|Jiné"],
+ ["Upřesnění transportu / odkud","text"],
+ ["Důvod přijetí – resuscitace a kritické stavy","multi",
+  "Bezvědomí|Po KPR – ROSC|Probíhající KPR|Náhlá zástava oběhu|Výběh resuscitačního týmu|Šokový stav|Respirační selhání|Oběhové selhání"],
+ ["Důvod přijetí – kardiopulmonální","multi",
+  "Dušnost|Hypoxie|Bolest na hrudi|Akutní koronární syndrom|Arytmie|Plicní embolie|Plicní edém|Hypertenzní krize"],
+ ["Důvod přijetí – trauma","multi",
+  "Trauma|Polytrauma|Kraniotrauma|Pád z výšky|Dopravní nehoda|Penetrující poranění|Popáleniny|Krvácení"],
+ ["Důvod přijetí – neurologie a metabolismus","multi",
+  "CMP / iktus|Křeče|Status epilepticus|Porucha vědomí|Hypoglykemie|Hyperglykemie|DKA|Intoxikace"],
+ ["Důvod přijetí – ostatní","multi",
+  "Podchlazení|Hypertermie|Sepse|Anafylaxe|Akutní břicho|GIT krvácení|Tonutí|Strangulace|Suicidální pokus|Akutní renální selhání"],
+ ["Jiný důvod / okolnosti přijetí","text"],
+ ["Stav při příjmu","one",
+  "Stabilní|Oběhově nestabilní|Respiračně insuficientní|V bezvědomí|V kritickém stavu|Za probíhající KPR|Po ROSC"],
+ ["Čas příjmu","text"]
+]
+},
+{
+ title:"02 | Oběh a hemodynamika",
+ fields:[
+ ["Oběhový stav","multi",
+  "Stabilní|Nestabilní|Hypotenze|Hypertenze|Centralizace|Hypoperfuze|Šok|Bez spontánního oběhu"],
+ ["Srdeční rytmus","one",
+  "Sinusový|Sinusová tachykardie|Sinusová bradykardie|FiS|Flutter síní|SVT|KT|FK|PEA|Asystolie|Stimulovaný"],
+ ["TK (mmHg)","text"],
+ ["MAP (mmHg)","text"],
+ ["TF (/min)","text"],
+ ["Kapilární návrat","one","Do 2 s|Prodloužený|Nehodnotitelný"],
+ ["Periferie","multi","Teplá|Chladná|Bledá|Cyanotická|Mramorovaná|Otoky"],
+ ["Vazopresory / inotropika","multi",
+  "Bez podpory|Noradrenalin|Adrenalin|Dobutamin|Dopamin|Vasopresin|Milrinon"],
+ ["Dávky oběhové podpory","text"]
+]
+},
+{
+ title:"03 | Vědomí a neurologie",
+ fields:[
+ ["Vědomí","one",
+  "Plně při vědomí|Orientovaný|Dezorientovaný|Somnolence|Sopor|Kóma|Sedovaný|Nehodnotitelné"],
+ ["GCS E","one",
+  "4 – spontánní otevření|3 – na oslovení|2 – na bolest|1 – bez reakce|NT"],
+ ["GCS V","one",
+  "5 – orientovaný|4 – zmatený|3 – nepřiměřená slova|2 – nesrozumitelné zvuky|1 – bez reakce|NT (např. OTI)"],
+ ["GCS M","one",
+  "6 – vyhoví výzvě|5 – lokalizuje bolest|4 – únik na bolest|3 – patologická flexe|2 – extenze|1 – bez reakce|NT"],
+ ["RASS","one",
+  "+4 agresivní|+3 výrazná agitace|+2 agitace|+1 neklid|0 bdělý, klidný|−1 ospalý|−2 lehká sedace|−3 střední sedace|−4 hluboká sedace|−5 neprobuditelný"],
+ ["Zornice","multi",
+  "Izokorické|Anizokorické|Mióza|Mydriáza|Fotoreakce bilat. výbavná|Fotoreakce zpomalená|Fotoreakce nevýbavná P|Fotoreakce nevýbavná L|Fotoreakce bilat. nevýbavná"],
+ ["Velikost zornic P/L (mm)","text"],
+ ["Motorika a další nález","multi",
+  "Bez lateralizace|Pravostranná paréza|Levostranná paréza|Plegie|Křeče|Delirium|Agitace|Porucha řeči|Meningeální příznaky"]
+]
+},
+{
+ title:"04 | Ventilace a oxygenoterapie",
+ fields:[
+ ["Dýchání","one",
+  "Spontánní|Dušnost|Tachypnoe|Bradypnoe|Apnoe|Řízená ventilace"],
+ ["Oxygenoterapie","one",
+  "Bez O₂|Nosní brýle|Jednoduchá maska|Maska s rezervoárem|Venturi maska|HFNO|NIV|Invazivní UPV|Ambuvak"],
+ ["Dýchací cesty","multi",
+  "Bez pomůcky|Ústní vzduchovod|Nosní vzduchovod|Laryngeální maska|Laryngeální tubus|OTI|NTI|Tracheostomie"],
+ ["Režim UPV","one",
+  "VCV|PCV|PRVC|SIMV|PSV|CPAP|BiPAP|Jiný"],
+ ["Průtok O₂ (l/min)","text"],
+ ["FiO₂ (%)","text"],
+ ["PEEP (cmH₂O)","text"],
+ ["Vt (ml)","text"],
+ ["DF (/min)","text"],
+ ["SpO₂ (%)","text"],
+ ["EtCO₂ (mmHg / kPa)","text"],
+ ["Auskultační nález","multi",
+  "Bilat. sklípkové|Oslabené vpravo|Oslabené vlevo|Pískoty|Chrůpky|Vlhké fenomény|Neslyšné dýchání"],
+ ["Sekrece z DC","multi",
+  "Bez sekrece|Čirý sekret|Hlenovitý|Purulentní|Krvavý|Pěnivý|Odsávání provedeno"]
+]
+},
+{
+ title:"05 | Sedace, analgezie a relaxace",
+ fields:[
+ ["Hloubka sedace","one",
+  "Bez sedace|Lehká|Střední|Hluboká|Celková anestezie|Nehodnotitelná"],
+ ["Sedativa","multi",
+  "Propofol|Midazolam|Dexmedetomidin|Ketamin|Diazepam|Jiné"],
+ ["Analgetika","multi",
+  "Sufentanil|Fentanyl|Remifentanil|Morfin|Metamizol|Paracetamol|Jiné"],
+ ["Myorelaxancia","multi",
+  "Rokuronium|Suxamethonium|Cisatrakurium|Bez relaxace"],
+ ["Bolest NRS","one",
+  "0|1|2|3|4|5|6|7|8|9|10|Nehodnotitelná"],
+ ["Dávkování a účinek","text"]
+]
+},
+{
+ title:"06 | Invazivní vstupy a pomůcky",
+ fields:[
+ ["Cévní vstupy","multi",
+  "PŽK|CŽK|Arteriální katétr|IO vstup|PICC|Midline|Dialyzační katétr|Port"],
+ ["Lokalizace a velikost vstupů","text"],
+ ["Další invaze","multi",
+  "OTI|Tracheostomie|PMK|NGS|OGS|Hrudní drén P|Hrudní drén L|Břišní drén|EVD|ICP čidlo|ECMO kanyly|Dočasná stimulace"],
+ ["Stav vstupů","multi",
+  "Průchodné|Krytí suché|Bez komplikací|Krvácení|Prosakování|Neprůchodné|Ošetřeny"]
+]
+},
+{
+ title:"07 | Zobrazovací a funkční vyšetření",
+ fields:[
+ ["Vyšetření","multi",
+  "12svodové EKG|RTG S+P|RTG skeletu|CT mozku|CT C páteře|CT hrudníku|CT břicha a pánve|CT polytrauma|CT angiografie|CT perfuze|FAST / eFAST|UZ břicha|ECHO srdce|Duplexní UZ|MRI|Endoskopie"],
+ ["Významné nálezy","text"]
+]
+},
+{
+ title:"08 | Odběry a laboratorní vyšetření",
+ fields:[
+ ["Provedené odběry","multi",
+  "KO + diferenciál|Biochemie|Ionogram|Urea / kreatinin|Jaterní testy|CRP|PCT|Koagulace|Fibrinogen|D-dimery|Troponin|NT-proBNP|ABR / Astrup|Laktát|Glykemie|Krevní skupina|Screening protilátek|Křížová zkouška|Hemokultury|Moč chemicky|Moč kultivace|Toxikologie"],
+ ["Významné laboratorní výsledky","text"]
+]
+},
+{
+ title:"09 | Kůže, eliminace a ošetřovatelská péče",
+ fields:[
+ ["Kožní nález","multi",
+  "Kůže intaktní|Bledost|Cyanóza|Mramoráž|Hematómy|Dekubity|Rány|Otoky|Anasarka"],
+ ["Břicho","multi",
+  "Měkké|Vzedmuté|Bolestivé|Nebolestivé|Rigidní"],
+ ["Diuréza","one",
+  "Spontánní|PMK|Oligurie|Anurie|Polyurie|Hematurie|Nehodnotitelná"],
+ ["Diuréza – množství a charakter","text"],
+ ["Stolice","one",
+  "Bez odchodu|Fyziologická|Průjem|Meléna|Enteroragie|Inkontinence|Nezjištěno"],
+ ["Výživa","one",
+  "Per os|NPO|Enterální|Parenterální|Nehodnotitelná"],
+ ["Provedená péče","multi",
+  "Monitorace|Hygiena|Polohování|Prevence dekubitů|Převazy|Odsávání DC|Péče o dutinu ústní|Péče o oči|Bilance tekutin|Odběry|Asistence u výkonu|KPR|Defibrilace|Kardioverze|Transport na vyšetření"]
+]
+},
+{
+ title:"10 | Farmakoterapie a transfuzní přípravky",
+ fields:[
+ ["Další léčba","multi",
+  "Krystaloidy|Antibiotika|Antikoagulace|Hemostatická léčba|Diuretika|Inzulinoterapie|Trombolýza|CRRT|MTP aktivován"],
+ ["Transfuzní přípravky","multi",
+  "ERD|Plazma|Trombocyty|Kryoprecipitát"],
+ ["Počet a identifikace přípravků","text"],
+ ["Podané léky, dávky a časy","text"]
+]
+},
+{
+ title:"11 | Průběh, předání a ukončení péče",
+ fields:[
+ ["Další průběh","multi",
+  "Stabilizace|Stav beze změny|Zhoršení stavu|Refrakterní šok|Opakovaná KPR|ROSC|Předán na ARO|Předán na JIP|Předán na standard|Překlad jinam|Exitus letalis"],
+ ["Čas významné události","text"],
+ ["Informování rodiny","one",
+  "Informována lékařem|Rodina přítomna|Nepodařilo se kontaktovat|Nezjištěno"],
+ ["Osobní věci","one",
+  "Předány rodině|Předány personálu|Uloženy dle pravidel|U pacienta|Nezjištěno"],
+ ["Další poznámky","text"],
+ ["Jmenovka / podpis","text"]
+]
+}
+];
+
+const data = {};
+const fieldTypes = {};
+
+function el(tag, cls, text) {
+ const node = document.createElement(tag);
+ if(cls) node.className = cls;
+ if(text !== undefined) node.textContent = text;
+ return node;
+}
+
+function buildForm() {
+ const root = document.getElementById("formArea");
+ root.replaceChildren();
+ sections.forEach((section,index)=>{
+  const details = el("section");
+  const d = el("details");
+  if(index===0) d.open=true;
+  const summary = el("summary","",section.title);
+  const content = el("div","content");
+  d.append(summary,content);
+
+  section.fields.forEach(([name,type,choices])=>{
+   fieldTypes[name]=type;
+   const wrap=el("div","field");
+   wrap.appendChild(el("label","title",name));
+
+   if(type==="text"){
+    const area=el("textarea");
+    area.placeholder="Doplň údaj...";
+    area.addEventListener("input",()=>{
+      data[name]=area.value.trim();
+      updateReport();
+    });
+    wrap.appendChild(area);
+   } else if(type==="one"){
+    const select=el("select");
+    select.appendChild(new Option("— Nevybráno —",""));
+    choices.split("|").forEach(x=>select.appendChild(new Option(x,x)));
+    select.addEventListener("change",()=>{
+      data[name]=select.value;
+      updateReport();
+    });
+    wrap.appendChild(select);
+   } else {
+    const options=el("div","options");
+    data[name]=[];
+    choices.split("|").forEach(option=>{
+      const label=el("label","choice");
+      const input=el("input");
+      input.type="checkbox";
+      input.addEventListener("change",()=>{
+       if(input.checked){
+        if(!data[name].includes(option)) data[name].push(option);
+       } else {
+        data[name]=data[name].filter(x=>x!==option);
+       }
+       updateReport();
+      });
+      label.append(input,document.createTextNode(option));
+      options.appendChild(label);
+    });
+    wrap.appendChild(options);
+   }
+   content.appendChild(wrap);
+  });
+  details.appendChild(d);
+  root.appendChild(details);
+ });
+ updateReport();
+}
+
+function get(name){
+ const value=data[name];
+ if(Array.isArray(value)) return value.join(", ");
+ return value || "";
+}
+
+function has(name){return !!get(name).trim();}
+
+function line(prefix,names,suffix="."){
+ const values=names.filter(has).map(get);
+ return values.length?prefix+values.join(", ")+suffix:"";
+}
+
+function gcs(){
+ const keys=["GCS E","GCS V","GCS M"];
+ if(!keys.some(has)) return "";
+ const parts=keys.filter(has).map(k=>
+  k.slice(-1)+get(k).split(" ")[0]
+ );
+ let result="GCS "+parts.join(" / ");
+ const valid=keys.every(k=>has(k)&&/^[1-6](\s|$)/.test(get(k)));
+ if(valid){
+  const sum=keys.reduce((s,k)=>s+Number(get(k).split(" ")[0]),0);
+  result+=" (celkem "+sum+")";
+ }else{
+  result+=" (celkové skóre nehodnotitelné nebo neúplné)";
+ }
+ return result+".";
+}
+
+function measurements(pairs){
+ const found=pairs.filter(([key])=>has(key))
+   .map(([key,label,unit])=>label+get(key)+unit);
+ return found.length?"Naměřené hodnoty: "+found.join(", ")+".":"";
+}
+
+function generateReport(){
+ const paragraphs=[];
+ const add=(items)=>{
+  const text=items.filter(Boolean).join(" ");
+  if(text) paragraphs.push(text);
+ };
+
+ const reasons=sections[0].fields
+  .filter(f=>f[0].startsWith("Důvod přijetí –"))
+  .map(f=>f[0]);
+
+ const arrival={
+  "ZZS HMP":"posádkou ZZS HMP",
+  "ZZS SČK":"posádkou ZZS SČK",
+  "LZS":"leteckou záchrannou službou",
+  "Jiné oddělení":"překladem z jiného oddělení",
+  "Jiná nemocnice":"překladem z jiné nemocnice",
+  "Samostatný příchod":"samostatně",
+  "Jiná ZZS":"posádkou jiné ZZS",
+  "Jiné":"jiným způsobem"
+ };
+
+ let intro="";
+ if(has("Způsob přijetí")){
+  intro="Pacient přijat "+(arrival[get("Způsob přijetí")]||get("Způsob přijetí"));
+  if(has("Upřesnění transportu / odkud"))
+   intro+=" ("+get("Upřesnění transportu / odkud")+")";
+  if(has("Čas příjmu")) intro+=" v "+get("Čas příjmu");
+  intro+=".";
+ }
+
+ const reasonValues=reasons.flatMap(k=>
+  Array.isArray(data[k])?data[k]:[]
+ );
+ if(has("Jiný důvod / okolnosti přijetí"))
+  reasonValues.push(get("Jiný důvod / okolnosti přijetí"));
+
+ add([
+  intro,
+  !intro?line("Čas příjmu: ",["Čas příjmu"]):"",
+  reasonValues.length?"Důvod přijetí: "+reasonValues.join(", ")+".":"",
+  line("Stav při příjmu: ",["Stav při příjmu"]),
+  line("Oběhově: ",["Oběhový stav"]),
+  line("Na monitoru rytmus: ",["Srdeční rytmus"]),
+  measurements([
+   ["TK (mmHg)","TK "," mmHg"],
+   ["MAP (mmHg)","MAP "," mmHg"],
+   ["TF (/min)","TF ","/min"]
+  ]),
+  line("Kapilární návrat: ",["Kapilární návrat"]),
+  line("Periferie: ",["Periferie"]),
+  line("Oběhová podpora: ",["Vazopresory / inotropika"]),
+  line("Dávkování: ",["Dávky oběhové podpory"])
+ ]);
+
+ add([
+  line("Stav vědomí: ",["Vědomí"]),
+  gcs(),
+  line("RASS: ",["RASS"]),
+  line("Zornice: ",["Zornice"]),
+  line("Velikost zornic P/L: ",["Velikost zornic P/L (mm)"]),
+  line("Neurologický nález: ",["Motorika a další nález"])
+ ]);
+
+ add([
+  line("Dýchání: ",["Dýchání"]),
+  line("Oxygenoterapie / ventilace: ",["Oxygenoterapie"]),
+  line("Dýchací cesty: ",["Dýchací cesty"]),
+  line("Režim UPV: ",["Režim UPV"]),
+  measurements([
+   ["Průtok O₂ (l/min)","O₂ "," l/min"],
+   ["FiO₂ (%)","FiO₂ "," %"],
+   ["PEEP (cmH₂O)","PEEP "," cmH₂O"],
+   ["Vt (ml)","Vt "," ml"],
+   ["DF (/min)","DF ","/min"],
+   ["SpO₂ (%)","SpO₂ "," %"],
+   ["EtCO₂ (mmHg / kPa)","EtCO₂ "," (jednotka dle zadání)"]
+  ]),
+  line("Auskultačně: ",["Auskultační nález"]),
+  line("Sekrece z DC: ",["Sekrece z DC"])
+ ]);
+
+ add([
+  line("Sedace: ",["Hloubka sedace"]),
+  line("Sedativa: ",["Sedativa"]),
+  line("Analgezie: ",["Analgetika"]),
+  line("Myorelaxace: ",["Myorelaxancia"]),
+  has("Bolest NRS")?
+   "Bolest NRS: "+get("Bolest NRS")+
+   (get("Bolest NRS")==="Nehodnotitelná"?".":"/10."):"",
+  line("Dávkování a efekt: ",["Dávkování a účinek"])
+ ]);
+
+ add([
+  line("Zavedené cévní vstupy: ",["Cévní vstupy"]),
+  line("Lokalizace vstupů: ",["Lokalizace a velikost vstupů"]),
+  line("Další invazivní zajištění: ",["Další invaze"]),
+  line("Stav vstupů: ",["Stav vstupů"]),
+  line("Provedená vyšetření: ",["Vyšetření"]),
+  line("Významné nálezy: ",["Významné nálezy"]),
+  line("Provedené odběry: ",["Provedené odběry"]),
+  line("Laboratorní výsledky: ",["Významné laboratorní výsledky"])
+ ]);
+
+ add([
+  line("Kožní nález: ",["Kožní nález"]),
+  line("Břicho: ",["Břicho"]),
+  line("Diuréza: ",["Diuréza"]),
+  line("Množství a charakter moči: ",["Diuréza – množství a charakter"]),
+  line("Stolice: ",["Stolice"]),
+  line("Výživa: ",["Výživa"]),
+  line("Ošetřovatelská péče: ",["Provedená péče"])
+ ]);
+
+ add([
+  line("Podaná léčba: ",["Další léčba"]),
+  line("Transfuzní přípravky: ",["Transfuzní přípravky"]),
+  line("Počet a identifikace přípravků: ",["Počet a identifikace přípravků"]),
+  line("Farmakoterapie: ",["Podané léky, dávky a časy"]),
+  line("Další průběh: ",["Další průběh"]),
+  line("Čas významné události: ",["Čas významné události"]),
+  line("Rodina: ",["Informování rodiny"]),
+  line("Osobní věci: ",["Osobní věci"]),
+  line("Další záznam: ",["Další poznámky"])
+ ]);
+
+ const shift=document.querySelector('input[name="shift"]:checked').value;
+ let result=shift+" směna:\n\n";
+ result+=paragraphs.length?
+   paragraphs.join("\n\n"):"Zatím nejsou vyplněny žádné údaje.";
+ if(has("Jmenovka / podpis"))
+  result+="\n\nZapsal/a: "+get("Jmenovka / podpis");
+ return result;
+}
+
+function updateReport(){
+ document.getElementById("output").textContent=generateReport();
+ const keys=Object.keys(fieldTypes);
+ const filled=keys.filter(has).length;
+ document.getElementById("progress").textContent=
+  "Vyplněno "+filled+" z "+keys.length+" polí";
+}
+
+function toggleAll(open){
+ document.querySelectorAll("#formArea details").forEach(d=>d.open=open);
+}
+
+async function copyReport(){
+ const text=generateReport();
+ try {
+  await navigator.clipboard.writeText(text);
+  showStatus("Zápis zkopírován.");
+ }catch(e){
+  const area=document.createElement("textarea");
+  area.value=text;
+  document.body.appendChild(area);
+  area.select();
+  try {
+   const success=document.execCommand("copy");
+   showStatus(success?"Zápis zkopírován.":"Označ a zkopíruj text ručně.");
+  }catch(err){
+   showStatus("Kopírování není dostupné. Text lze označit ručně.");
+  }
+  area.remove();
+ }
+}
+
+function saveText(){
+ const blob=new Blob([generateReport()],{
+  type:"text/plain;charset=utf-8"
+ });
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");
+ a.href=url;
+ a.download="osetrovatelsky_zapis.txt";
+ document.body.appendChild(a);
+ a.click();
+ a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+ showStatus("Soubor TXT byl připraven ke stažení.");
+}
+
+function clearForm(){
+ if(!confirm("Opravdu vymazat celý formulář?")) return;
+ Object.keys(data).forEach(k=>delete data[k]);
+ buildForm();
+ showStatus("Formulář byl vymazán.");
+}
+
+function showStatus(message){
+ document.getElementById("status").textContent=message;
+}
+
+document.querySelectorAll('input[name="shift"]').forEach(input=>
+ input.addEventListener("change",updateReport)
+);
+
+buildForm();
+</script>
+</body>
+</html>
